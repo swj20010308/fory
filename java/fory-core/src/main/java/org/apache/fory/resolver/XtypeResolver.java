@@ -149,6 +149,7 @@ public class XtypeResolver extends TypeResolver {
     }
   }
 
+  @Override
   public void register(Class<?> type) {
     while (registeredTypeIds.contains(xtypeIdGenerator)) {
       xtypeIdGenerator++;
@@ -156,6 +157,7 @@ public class XtypeResolver extends TypeResolver {
     register(type, xtypeIdGenerator++);
   }
 
+  @Override
   public void register(Class<?> type, int userTypeId) {
     // ClassInfo[] has length of max type id. If the type id is too big, Fory will waste many
     // memory. We can relax this limit in the future.
@@ -204,6 +206,7 @@ public class XtypeResolver extends TypeResolver {
         xtypeId);
   }
 
+  @Override
   public void register(Class<?> type, String namespace, String typeName) {
     Preconditions.checkArgument(
         !typeName.contains("."),
@@ -335,17 +338,25 @@ public class XtypeResolver extends TypeResolver {
   }
 
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
-    ClassInfo classInfo = checkClassRegistration(type);
-    if (!serializerClass.getPackage().getName().startsWith("org.apache.fory")) {
-      SerializationUtils.validate(type, serializerClass);
-    }
-    classInfo.serializer = Serializers.newSerializer(fory, type, serializerClass);
+    registerSerializer(type, Serializers.newSerializer(fory, type, serializerClass));
   }
 
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
     ClassInfo classInfo = checkClassRegistration(type);
     if (!serializer.getClass().getPackage().getName().startsWith("org.apache.fory")) {
       SerializationUtils.validate(type, serializer.getClass());
+    }
+    int xtypeId = classInfo.xtypeId;
+    int foryId = xtypeId & 0xff;
+    if (foryId != Types.EXT && foryId != Types.NAMED_EXT) {
+      if (foryId == Types.STRUCT || foryId == Types.COMPATIBLE_STRUCT) {
+        classInfo.xtypeId = (xtypeId & 0xffffff00) | Types.EXT;
+      } else if (foryId == Types.NAMED_STRUCT || foryId == Types.NAMED_COMPATIBLE_STRUCT) {
+        classInfo.xtypeId = (xtypeId & 0xffffff00) | Types.NAMED_EXT;
+      } else {
+        throw new IllegalArgumentException(
+            String.format("Can't register serializer for type %s with id %s", type, xtypeId));
+      }
     }
     classInfo.serializer = serializer;
   }

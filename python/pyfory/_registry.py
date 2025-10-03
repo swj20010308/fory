@@ -60,6 +60,8 @@ from pyfory.serializer import (
     FunctionSerializer,
     ObjectSerializer,
     TypeSerializer,
+    ModuleSerializer,
+    MappingProxySerializer,
     MethodSerializer,
     UnsupportedSerializer,
     NativeFuncMethodSerializer,
@@ -177,7 +179,7 @@ class TypeResolver:
         self.fory = fory
         self.metastring_resolver = fory.metastring_resolver
         self.language = fory.language
-        self.require_registration = fory.require_type_registration
+        self.require_registration = fory.strict
         self._metastr_to_str = dict()
         self._metastr_to_type = dict()
         self._hash_to_metastring = dict()
@@ -216,15 +218,26 @@ class TypeResolver:
         register(slice, serializer=SliceSerializer)
         register(np.ndarray, serializer=NDArraySerializer)
         register(array.array, serializer=DynamicPyArraySerializer)
+        register(types.MappingProxyType, serializer=MappingProxySerializer)
         if not self.require_registration:
+            register(types.ModuleType, serializer=ModuleSerializer)
             self._internal_py_serializer_map = {
                 ReduceSerializer: (self._stub_cls("__Reduce__"), self._next_type_id()),
                 TypeSerializer: (self._stub_cls("__Type__"), self._next_type_id()),
                 MethodSerializer: (self._stub_cls("__Method__"), self._next_type_id()),
-                FunctionSerializer: (self._stub_cls("__Function__"), self._next_type_id()),
-                NativeFuncMethodSerializer: (self._stub_cls("__NativeFunction__"), self._next_type_id()),
+                FunctionSerializer: (
+                    self._stub_cls("__Function__"),
+                    self._next_type_id(),
+                ),
+                NativeFuncMethodSerializer: (
+                    self._stub_cls("__NativeFunction__"),
+                    self._next_type_id(),
+                ),
             }
-            for serializer, (stub_cls, type_id) in self._internal_py_serializer_map.items():
+            for serializer, (
+                stub_cls,
+                type_id,
+            ) in self._internal_py_serializer_map.items():
                 register(stub_cls, serializer=serializer, type_id=type_id)
 
     @staticmethod
@@ -725,7 +738,15 @@ class TypeResolver:
         ns_meta_bytes = self.metastring_resolver.get_metastr_bytes(ns_metastr)
         type_metastr = self.typename_encoder.encode(type_def.typename)
         type_meta_bytes = self.metastring_resolver.get_metastr_bytes(type_metastr)
-        typeinfo = TypeInfo(type_def.cls, type_def.type_id, serializer, ns_meta_bytes, type_meta_bytes, False, type_def)
+        typeinfo = TypeInfo(
+            type_def.cls,
+            type_def.type_id,
+            serializer,
+            ns_meta_bytes,
+            type_meta_bytes,
+            False,
+            type_def,
+        )
         return typeinfo
 
     def reset(self):
